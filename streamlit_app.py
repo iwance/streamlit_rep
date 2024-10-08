@@ -4,7 +4,7 @@ import plotly.express as px
 from io import BytesIO
 
 
-st.title("Вывод информации для Юнит ВБ")
+st.title("Работа с базовой стоимостью в Юнит вб, озон, ям")
 
 
 def upload_file():
@@ -20,6 +20,16 @@ def upload_file():
 
     return uploaded_file
 #uploaded_file = st.file_uploader("Загрузите файл", type='xlsx')
+
+dfs = pd.DataFrame()
+df_y = pd.DataFrame()
+df_oz = pd.DataFrame()
+df_seb = pd.DataFrame()
+df_data = pd.DataFrame()
+df_wb = pd.DataFrame()
+
+is_based_cost = 'Нет'
+is_based_cost = st.radio("Есть столбец базовой стоимости?", ('Нет', 'Да'))
 
 uploaded_file = upload_file()
 
@@ -74,20 +84,25 @@ elif len(df_data) == 7:
     bud_y = df_data.iloc[5, 5]
     where_y = df_data.iloc[6, 5]
 
-    
-    df_unit_wb = df_seb[['Артикул продавца', 'Наименование товара', 'Категория вб', 'Длина', 'Ширина', 'Высота', 'С/С']]
+    if is_based_cost == 'Да':
+        df_unit_wb = df_seb[['Артикул продавца', 'Наименование товара', 'Категория вб', 'Длина', 'Ширина', 'Высота', 'С/С', 'Базовая стоимость']]
+    elif is_based_cost == 'Нет':
+        df_unit_wb = df_seb[['Артикул продавца', 'Наименование товара', 'Категория вб', 'Длина', 'Ширина', 'Высота', 'С/С']]
+        
     df_unit_wb = df_unit_wb.assign(Объем_л=(df_unit_wb['Длина'] * df_unit_wb['Ширина'] * df_unit_wb['Высота']) / 1000)
     
     df_unit_wb = pd.merge(df_unit_wb, df_wb, left_on='Категория вб', right_on='Предмет', how='left')
     
     if model_wb == 'FBO':
         df_unit_wb['ИТОГО Логистика'] = ((df_unit_wb['Объем_л'] - 1 ) * 8 + 33)  
-        df_unit_wb['Базовая стоимость'] =  (df_unit_wb['ИТОГО Логистика'] + df_unit_wb['С/С'] ) / (1 - value_chp_wb - df_unit_wb['Склад WB, %'] / 100 - tax_wb - bud_wb)
+        if is_based_cost == 'Нет':
+            df_unit_wb['Базовая стоимость'] =  (df_unit_wb['ИТОГО Логистика'] + df_unit_wb['С/С'] ) / (1 - value_chp_wb - df_unit_wb['Склад WB, %'] / 100 - tax_wb - bud_wb)
         df_unit_wb['ИТОГО Комиссия'] = df_unit_wb['Склад WB, %'] * df_unit_wb['Базовая стоимость'] / 100
         
     elif model_wb == 'FBS':
         df_unit_wb['ИТОГО Логистика'] = ((df_unit_wb['Объем_л'] - 1 ) * 8 + 33) 
-        df_unit_wb['Базовая стоимость'] =  (df_unit_wb['ИТОГО Логистика'] + df_unit_wb['С/С'] ) / (1 - value_chp_wb - df_unit_wb['Склад продавца - везу на склад WB, %'] / 100  - tax_wb - bud_wb)
+        if is_based_cost == 'Нет':
+            df_unit_wb['Базовая стоимость'] =  (df_unit_wb['ИТОГО Логистика'] + df_unit_wb['С/С'] ) / (1 - value_chp_wb - df_unit_wb['Склад продавца - везу на склад WB, %'] / 100  - tax_wb - bud_wb)
         df_unit_wb['ИТОГО Комиссия'] = df_unit_wb['Склад продавца - везу на склад WB, %'] * df_unit_wb['Базовая стоимость'] / 100
     
     df_unit_wb['Налог'] = tax_wb * df_unit_wb['Базовая стоимость']
@@ -122,7 +137,7 @@ elif len(df_data) == 7:
     
     # Кнопка скачивания
     st.download_button(
-        label="Скачать результат в Excel",
+        label="Скачать результат Юнит ВБ в Excel",
         data=excel_data,
         file_name='unit_wb_result.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -149,16 +164,18 @@ elif len(df_data) == 7:
     df_unit_oz['Оплата за отправление FBS'] = df_oz[df_oz['Количество отправлений'] == count_oz]['Тариф за отправление'].item()
     
     if model_oz == 'FBS':
-        df_unit_oz['Базовая стоимость'] = (df_unit_oz['С/С'] + ((df_unit_oz['Объем_л'] - 1) * 12 + 76) \
-        +  df_unit_oz['Оплата за отправление FBS'] ) / (1 - value_chp_oz - (0.055 + 0.015)  \
-        - df_unit_oz['Вознаграждение на FBS']  -  tax_oz - bud_oz)
+        if is_based_cost == 'Нет':
+            df_unit_oz['Базовая стоимость'] = (df_unit_oz['С/С'] + ((df_unit_oz['Объем_л'] - 1) * 12 + 76) \
+            +  df_unit_oz['Оплата за отправление FBS'] ) / (1 - value_chp_oz - (0.055 + 0.015)  \
+            - df_unit_oz['Вознаграждение на FBS']  -  tax_oz - bud_oz)
         
         df_unit_oz['ИТОГО Логистика'] = ((df_unit_oz['Объем_л'] - 1) * 12) + 76 + (0.055 + 0.015) * df_unit_oz['Базовая стоимость'] + df_unit_oz['Оплата за отправление FBS'] 
         df_unit_oz['ИТОГО Комиссия'] = df_unit_oz['Вознаграждение на FBS'] * df_unit_oz['Базовая стоимость'] #/ 100
         
     elif model_oz == 'FBO':
-        df_unit_oz['Базовая стоимость'] = ( df_unit_oz['С/С'] + (df_unit_oz['Объем_л'] - 1) * 10 + 63)\
-        / (1 - value_chp_oz - (0.055 + 0.015) - df_unit_oz['Вознаграждение на FBO']  -  tax_oz - bud_oz)
+        if is_based_cost == 'Нет':
+            df_unit_oz['Базовая стоимость'] = ( df_unit_oz['С/С'] + (df_unit_oz['Объем_л'] - 1) * 10 + 63)\
+            / (1 - value_chp_oz - (0.055 + 0.015) - df_unit_oz['Вознаграждение на FBO']  -  tax_oz - bud_oz)
         
         df_unit_oz['ИТОГО Логистика'] = ((df_unit_oz['Объем_л'] - 1) * 10) + 63 + (0.055 + 0.015) * df_unit_oz['Базовая стоимость']
         df_unit_oz['ИТОГО Комиссия'] = df_unit_oz['Вознаграждение на FBO'] * df_unit_oz['Базовая стоимость']# / 100
@@ -178,7 +195,7 @@ elif len(df_data) == 7:
     
     # Кнопка скачивания
     st.download_button(
-        label="Скачать результат в CSV",
+        label="Скачать результат Юнит Озон в CSV",
         data=csv_oz,
         file_name='unit_oz_result.csv',
         mime='text/csv'
@@ -194,7 +211,7 @@ elif len(df_data) == 7:
     
     # Кнопка скачивания
     st.download_button(
-        label="Скачать результат в Excel",
+        label="Скачать результат Юнит Озон в Excel",
         data=excel_data_oz,
         file_name='unit_oz_result.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -217,8 +234,9 @@ elif len(df_data) == 7:
     df_unit_y = pd.merge(df_unit_y, df_y[['Доставка между населенными пунктами', 'Unnamed: 14', 'Unnamed: 17']].dropna(), left_on='Объемный_вес', right_on='Доставка между населенными пунктами', how='left')
 
     if model_oz == 'FBS':
-        df_unit_y['Базовая стоимость'] = (df_unit_y['С/С'] + df_unit_y['Unnamed: 14' + (df_unit_y['Обработка заказа'])] + 0.12) \
-         / (1 - (0.013 + 0.014 + 0.045) - df_unit_y['Тарифы FBS, Экспресс']  -  tax_y - bud_y - value_chp_y)
+        if is_based_cost == 'Нет':
+            df_unit_y['Базовая стоимость'] = (df_unit_y['С/С'] + df_unit_y['Unnamed: 14' + (df_unit_y['Обработка заказа'])] + 0.12) \
+             / (1 - (0.013 + 0.014 + 0.045) - df_unit_y['Тарифы FBS, Экспресс']  -  tax_y - bud_y - value_chp_y)
         
         df_unit_y['Доставка покупателю'] = df_unit_y['Базовая стоимость'] * 0.045
     
@@ -226,8 +244,10 @@ elif len(df_data) == 7:
         df_unit_y['ИТОГО Комиссия'] = df_unit_y['Тарифы FBS, Экспресс'] * df_unit_y['Базовая стоимость'] #/ 100
         
     elif model_oz == 'FBO':
-        df_unit_y['Базовая стоимость'] = ( df_unit_y['С/С'] + df_unit_y['Unnamed: 17'] + 0.12)\
-        / (1 - (0.013 + 0.014 + 0.045) - df_unit_y['Тариф FBY']  -  tax_y - bud_y - value_chp_y)
+        if is_based_cost == 'Нет':
+            df_unit_y['Базовая стоимость'] = ( df_unit_y['С/С'] + df_unit_y['Unnamed: 17'] + 0.12)\
+            / (1 - (0.013 + 0.014 + 0.045) - df_unit_y['Тариф FBY']  -  tax_y - bud_y - value_chp_y)
+            
         df_unit_y['Доставка покупателю'] = df_unit_y['Базовая стоимость'] * 0.045
     
         df_unit_y['ИТОГО Логистика'] = df_unit_y['Доставка покупателю'] + df_unit_y['Unnamed: 17'] 
@@ -257,7 +277,7 @@ elif len(df_data) == 7:
     csv_y = df_unit_y.to_csv(index=False).encode('utf-8')
     
     st.download_button(
-        label="Скачать результат в CSV",
+        label="Скачать результат Юнит ЯМ в CSV",
         data=csv_y,
         file_name='unit_oz_result.csv',
         mime='text/csv'
@@ -275,6 +295,6 @@ elif len(df_data) == 7:
     st.download_button(
         label="Скачать результат в Excel",
         data=excel_data_y,
-        file_name='unit_oz_result.xlsx',
+        file_name='unit_y_result.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
